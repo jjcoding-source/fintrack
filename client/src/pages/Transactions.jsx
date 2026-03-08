@@ -11,13 +11,9 @@ const EMPTY_FORM = {
   title: "", amount: "", type: "expense", category: "", date: "", note: "",
 }
 
-const CATEGORIES = [
-  "Housing", "Food", "Transport", "Health", "Shopping",
-  "Entertainment", "Salary", "Freelance", "Investment"
-]
-
 export default function Transactions() {
   const [transactions, setTransactions] = useState([])
+  const [categories, setCategories]     = useState([])
   const [search, setSearch]             = useState("")
   const [filter, setFilter]             = useState("all")
   const [showModal, setShowModal]       = useState(false)
@@ -27,13 +23,17 @@ export default function Transactions() {
   const [loading, setLoading]           = useState(true)
 
   useEffect(() => {
-    fetchTransactions()
+    fetchData()
   }, [])
 
-  async function fetchTransactions() {
+  async function fetchData() {
     try {
-      const { data } = await api.get("/transactions")
-      setTransactions(data)
+      const [txRes, catRes] = await Promise.all([
+        api.get("/transactions"),
+        api.get("/categories"),
+      ])
+      setTransactions(txRes.data)
+      setCategories(catRes.data)
     } catch (error) {
       console.log(error)
     } finally {
@@ -218,7 +218,9 @@ export default function Transactions() {
               </span>
 
               <p className="text-xs text-gray-500">
-                {new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                {new Date(t.date).toLocaleDateString("en-US", {
+                  month: "short", day: "numeric", year: "numeric"
+                })}
               </p>
 
               <p className={`font-bold text-sm tabular-nums ${t.type === "income" ? "text-emerald-400" : "text-red-400"}`}>
@@ -266,6 +268,7 @@ export default function Transactions() {
               </button>
             </div>
 
+            {/* Type Toggle */}
             <div className="grid grid-cols-2 gap-2 mb-5 p-1 bg-white/[0.03] rounded-xl">
               {["expense", "income"].map(type => (
                 <button
@@ -312,8 +315,10 @@ export default function Transactions() {
                   className="w-full bg-white/[0.04] border border-white/[0.07] rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-emerald-400/40 transition-colors"
                 >
                   <option value="" className="bg-[#13151F]">Select category</option>
-                  {CATEGORIES.map(c => (
-                    <option key={c} value={c} className="bg-[#13151F]">{c}</option>
+                  {categories.map(c => (
+                    <option key={c._id} value={c.name} className="bg-[#13151F]">
+                      {c.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -329,7 +334,7 @@ export default function Transactions() {
             </div>
 
             <div className="mb-6">
-              <label className="block text-[11px] text-gray-500 tracking-widest uppercase mb-1.5">Note (optional)</label>
+              <label className="block text-[11px] text-gray-500 tracking-widests uppercase mb-1.5">Note (optional)</label>
               <textarea
                 rows={2}
                 value={form.note}
