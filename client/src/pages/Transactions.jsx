@@ -273,7 +273,7 @@ export default function Transactions() {
               {["expense", "income"].map(type => (
                 <button
                   key={type}
-                  onClick={() => setForm(f => ({ ...f, type }))}
+                  onClick={() => setForm(f => ({ ...f, type, category: "" }))}
                   className={`py-2.5 rounded-lg text-sm font-medium capitalize transition-colors
                     ${form.type === type
                       ? type === "expense"
@@ -314,12 +314,15 @@ export default function Transactions() {
                   onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
                   className="w-full bg-white/[0.04] border border-white/[0.07] rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-emerald-400/40 transition-colors"
                 >
-                  <option value="" className="bg-[#13151F]">Select category</option>
-                  {categories.map(c => (
+                <option value="" className="bg-[#13151F]">Select category</option>
+                {categories
+                  .filter(c => c.type === form.type)
+                  .map(c => (
                     <option key={c._id} value={c.name} className="bg-[#13151F]">
-                      {c.name}
-                    </option>
-                  ))}
+                    {c.name}
+                </option>
+               ))
+              }
                 </select>
               </div>
               <div>
