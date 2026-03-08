@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Filter, Search, Plus, Pencil, Trash2, X, Check } from "lucide-react"
-import { mockTransactions, mockCategories } from "../data/mockData"
+import api from "../utils/api"
 
 const fmt = (n) =>
   new Intl.NumberFormat("en-US", {
@@ -11,14 +11,35 @@ const EMPTY_FORM = {
   title: "", amount: "", type: "expense", category: "", date: "", note: "",
 }
 
+const CATEGORIES = [
+  "Housing", "Food", "Transport", "Health", "Shopping",
+  "Entertainment", "Salary", "Freelance", "Investment"
+]
+
 export default function Transactions() {
-  const [transactions, setTransactions] = useState(mockTransactions)
+  const [transactions, setTransactions] = useState([])
   const [search, setSearch]             = useState("")
   const [filter, setFilter]             = useState("all")
   const [showModal, setShowModal]       = useState(false)
   const [editingId, setEditingId]       = useState(null)
   const [form, setForm]                 = useState(EMPTY_FORM)
   const [deleteId, setDeleteId]         = useState(null)
+  const [loading, setLoading]           = useState(true)
+
+  useEffect(() => {
+    fetchTransactions()
+  }, [])
+
+  async function fetchTransactions() {
+    try {
+      const { data } = await api.get("/transactions")
+      setTransactions(data)
+    } catch (error) {
+      console.log(error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const filtered = useMemo(() => {
     return transactions.filter(t => {
@@ -41,42 +62,55 @@ export default function Transactions() {
 
   function openEdit(t) {
     setForm({
-      title: t.title, amount: t.amount, type: t.type,
-      category: t.category, date: t.date, note: t.note || "",
+      title:    t.title,
+      amount:   t.amount,
+      type:     t.type,
+      category: t.category,
+      date:     t.date?.split("T")[0] || "",
+      note:     t.note || "",
     })
     setEditingId(t._id)
     setShowModal(true)
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.title || !form.amount || !form.category || !form.date) return
-    const cat = mockCategories.find(c => c.name === form.category)
-    if (editingId) {
-      setTransactions(prev =>
-        prev.map(t =>
-          t._id === editingId
-            ? { ...t, ...form, amount: Number(form.amount), icon: cat?.icon || "💰" }
-            : t
-        )
-      )
-    } else {
-      setTransactions(prev => [
-        {
-          _id: Date.now().toString(),
-          ...form,
-          amount: Number(form.amount),
-          icon: cat?.icon || "💰",
-        },
-        ...prev,
-      ])
+    try {
+      if (editingId) {
+        const { data } = await api.put(`/transactions/${editingId}`, {
+          ...form, amount: Number(form.amount),
+        })
+        setTransactions(prev => prev.map(t => t._id === editingId ? data : t))
+      } else {
+        const { data } = await api.post("/transactions", {
+          ...form, amount: Number(form.amount),
+        })
+        setTransactions(prev => [data, ...prev])
+      }
+      setShowModal(false)
+      setForm(EMPTY_FORM)
+      setEditingId(null)
+    } catch (error) {
+      console.log(error)
     }
-    setShowModal(false)
-    setForm(EMPTY_FORM)
   }
 
-  function handleDelete(id) {
-    setTransactions(prev => prev.filter(t => t._id !== id))
-    setDeleteId(null)
+  async function handleDelete(id) {
+    try {
+      await api.delete(`/transactions/${id}`)
+      setTransactions(prev => prev.filter(t => t._id !== id))
+      setDeleteId(null)
+    } catch (error) {
+      console.log(error)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-2 border-white/10 border-t-emerald-400 rounded-full animate-spin" />
+      </div>
+    )
   }
 
   return (
@@ -86,7 +120,7 @@ export default function Transactions() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-white font-black text-2xl tracking-tight">Transactions</h2>
-          <p className="text-gray-500 text-sm mt-0.5">{transactions.length} transactions in March 2025</p>
+          <p className="text-gray-500 text-sm mt-0.5">{transactions.length} transactions total</p>
         </div>
         <button
           onClick={openAdd}
@@ -100,9 +134,9 @@ export default function Transactions() {
       {/* Summary Strip */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: "Total Income",   value: fmt(totalIncome),                color: "text-emerald-400" },
-          { label: "Total Expenses", value: fmt(totalExpense),               color: "text-red-400"     },
-          { label: "Net Balance",    value: fmt(totalIncome - totalExpense),  color: "text-blue-400"    },
+          { label: "Total Income",   value: fmt(totalIncome),               color: "text-emerald-400" },
+          { label: "Total Expenses", value: fmt(totalExpense),              color: "text-red-400"     },
+          { label: "Net Balance",    value: fmt(totalIncome - totalExpense), color: "text-blue-400"   },
         ].map((s, i) => (
           <div key={i} className="bg-[#13151F] border border-white/[0.07] rounded-2xl px-5 py-4">
             <p className="text-gray-500 text-[11px] tracking-widest uppercase mb-1">{s.label}</p>
@@ -152,15 +186,12 @@ export default function Transactions() {
 
       {/* Table */}
       <div className="bg-[#13151F] border border-white/[0.07] rounded-2xl overflow-hidden">
-
-        {/* Head */}
         <div className="grid grid-cols-[2fr_1fr_1fr_1fr_80px] px-5 py-3 border-b border-white/[0.07]">
           {["Transaction", "Category", "Date", "Amount", ""].map((h, i) => (
             <p key={i} className="text-[10px] text-gray-600 tracking-widest uppercase">{h}</p>
           ))}
         </div>
 
-        {/* Rows */}
         {filtered.length === 0 ? (
           <div className="py-16 text-center">
             <p className="text-gray-600 text-sm">No transactions found</p>
@@ -173,8 +204,8 @@ export default function Transactions() {
                 ${i < filtered.length - 1 ? "border-b border-white/[0.04]" : ""}`}
             >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-white/[0.05] flex items-center justify-center text-base shrink-0">
-                  {t.icon}
+                <div className="w-9 h-9 rounded-xl bg-white/[0.05] flex items-center justify-center text-sm font-bold text-gray-400 shrink-0">
+                  {t.type === "income" ? "+" : "-"}
                 </div>
                 <div>
                   <p className="text-sm text-white">{t.title}</p>
@@ -186,7 +217,9 @@ export default function Transactions() {
                 {t.category}
               </span>
 
-              <p className="text-xs text-gray-500">{t.date}</p>
+              <p className="text-xs text-gray-500">
+                {new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </p>
 
               <p className={`font-bold text-sm tabular-nums ${t.type === "income" ? "text-emerald-400" : "text-red-400"}`}>
                 {t.type === "income" ? "+" : "-"}{fmt(t.amount)}
@@ -233,7 +266,6 @@ export default function Transactions() {
               </button>
             </div>
 
-            {/* Type Toggle */}
             <div className="grid grid-cols-2 gap-2 mb-5 p-1 bg-white/[0.03] rounded-xl">
               {["expense", "income"].map(type => (
                 <button
@@ -280,10 +312,8 @@ export default function Transactions() {
                   className="w-full bg-white/[0.04] border border-white/[0.07] rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-emerald-400/40 transition-colors"
                 >
                   <option value="" className="bg-[#13151F]">Select category</option>
-                  {mockCategories.map(c => (
-                    <option key={c._id} value={c.name} className="bg-[#13151F]">
-                      {c.icon} {c.name}
-                    </option>
+                  {CATEGORIES.map(c => (
+                    <option key={c} value={c} className="bg-[#13151F]">{c}</option>
                   ))}
                 </select>
               </div>
@@ -362,7 +392,6 @@ export default function Transactions() {
           </div>
         </div>
       )}
-
     </div>
   )
 }

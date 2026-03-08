@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Plus, Pencil, Trash2, X, Check, Target } from "lucide-react"
-import { mockBudgets, mockTransactions } from "../data/mockData"
+import api from "../utils/api"
 
 const fmt = (n) =>
   new Intl.NumberFormat("en-US", {
@@ -14,21 +14,41 @@ const CATEGORY_OPTIONS = [
 ]
 
 export default function Budgets() {
-  const [budgets, setBudgets]     = useState(mockBudgets)
-  const [showModal, setShowModal] = useState(false)
-  const [editingId, setEditingId] = useState(null)
-  const [form, setForm]           = useState(EMPTY_FORM)
-  const [deleteId, setDeleteId]   = useState(null)
+  const [budgets, setBudgets]           = useState([])
+  const [transactions, setTransactions] = useState([])
+  const [showModal, setShowModal]       = useState(false)
+  const [editingId, setEditingId]       = useState(null)
+  const [form, setForm]                 = useState(EMPTY_FORM)
+  const [deleteId, setDeleteId]         = useState(null)
+  const [loading, setLoading]           = useState(true)
 
- 
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  async function fetchData() {
+    try {
+      const [budgetsRes, txRes] = await Promise.all([
+        api.get("/budgets"),
+        api.get("/transactions"),
+      ])
+      setBudgets(budgetsRes.data)
+      setTransactions(txRes.data)
+    } catch (error) {
+      console.log(error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const spentMap = useMemo(() => {
-    return mockTransactions
+    return transactions
       .filter(t => t.type === "expense")
       .reduce((acc, t) => {
         acc[t.category] = (acc[t.category] || 0) + t.amount
         return acc
       }, {})
-  }, [])
+  }, [transactions])
 
   const totalBudgeted = budgets.reduce((s, b) => s + b.limit, 0)
   const totalSpent    = budgets.reduce((s, b) => s + (spentMap[b.category] || 0), 0)
@@ -46,34 +66,50 @@ export default function Budgets() {
     setShowModal(true)
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.category || !form.limit) return
-    if (editingId) {
-      setBudgets(prev =>
-        prev.map(b =>
-          b._id === editingId
-            ? { ...b, category: form.category, limit: Number(form.limit) }
-            : b
-        )
-      )
-    } else {
-      setBudgets(prev => [
-        ...prev,
-        {
-          _id: Date.now().toString(),
+    try {
+      const now = new Date()
+      if (editingId) {
+        const { data } = await api.put(`/budgets/${editingId}`, {
+          category: form.category,
+          limit: Number(form.limit),
+        })
+        setBudgets(prev => prev.map(b => b._id === editingId ? data : b))
+      } else {
+        const { data } = await api.post("/budgets", {
           category: form.category,
           limit: Number(form.limit),
           color: "#4D9EFF",
-        },
-      ])
+          month: now.getMonth() + 1,
+          year: now.getFullYear(),
+        })
+        setBudgets(prev => [...prev, data])
+      }
+      setShowModal(false)
+      setForm(EMPTY_FORM)
+      setEditingId(null)
+    } catch (error) {
+      console.log(error)
     }
-    setShowModal(false)
-    setForm(EMPTY_FORM)
   }
 
-  function handleDelete(id) {
-    setBudgets(prev => prev.filter(b => b._id !== id))
-    setDeleteId(null)
+  async function handleDelete(id) {
+    try {
+      await api.delete(`/budgets/${id}`)
+      setBudgets(prev => prev.filter(b => b._id !== id))
+      setDeleteId(null)
+    } catch (error) {
+      console.log(error)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-2 border-white/10 border-t-emerald-400 rounded-full animate-spin" />
+      </div>
+    )
   }
 
   return (
@@ -109,91 +145,73 @@ export default function Budgets() {
       </div>
 
       {/* Budget Cards */}
-      <div className="grid grid-cols-2 gap-4">
-        {budgets.map(b => {
-          const spent = spentMap[b.category] || 0
-          const pct   = Math.min(Math.round((spent / b.limit) * 100), 100)
-          const over  = spent > b.limit
-          const warn  = pct >= 80 && !over
+      {budgets.length === 0 ? (
+        <div className="bg-[#13151F] border border-white/[0.07] rounded-2xl py-16 text-center">
+          <p className="text-gray-600 text-sm">No budgets yet — create your first one!</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4">
+          {budgets.map(b => {
+            const spent = spentMap[b.category] || 0
+            const pct   = Math.min(Math.round((spent / b.limit) * 100), 100)
+            const over  = spent > b.limit
+            const warn  = pct >= 80 && !over
+            const barColor = over ? "#FF5F7E" : warn ? "#FFD166" : b.color || "#4D9EFF"
 
-          const barColor = over ? "#FF5F7E" : warn ? "#FFD166" : b.color
-
-          return (
-            <div
-              key={b._id}
-              className="bg-[#13151F] border border-white/[0.07] rounded-2xl p-5 hover:border-white/[0.13] transition-colors"
-            >
-              {/* Top Row */}
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <p className="text-white font-bold text-base">{b.category}</p>
-                  <p className="text-gray-500 text-xs mt-0.5">{pct}% used</p>
+            return (
+              <div
+                key={b._id}
+                className="bg-[#13151F] border border-white/[0.07] rounded-2xl p-5 hover:border-white/[0.13] transition-colors"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <p className="text-white font-bold text-base">{b.category}</p>
+                    <p className="text-gray-500 text-xs mt-0.5">{pct}% used</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-black text-lg tracking-tight" style={{ color: over ? "#FF5F7E" : "#F1F2F6" }}>
+                      {fmt(spent)}
+                    </p>
+                    <p className="text-gray-600 text-xs">of {fmt(b.limit)}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p
-                    className="font-black text-lg tracking-tight"
-                    style={{ color: over ? "#FF5F7E" : "#F1F2F6" }}
+
+                <div className="h-2 bg-white/[0.06] rounded-full overflow-hidden mb-3">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${pct}%`,
+                      background: `linear-gradient(90deg, ${barColor}99, ${barColor})`,
+                      boxShadow: over ? `0 0 10px ${barColor}66` : warn ? `0 0 6px ${barColor}44` : "none",
+                    }}
+                  />
+                </div>
+
+                {over  && <p className="text-xs text-red-400 mb-3">Over budget by {fmt(spent - b.limit)}</p>}
+                {warn  && <p className="text-xs text-yellow-400 mb-3">Almost at limit — {fmt(b.limit - spent)} remaining</p>}
+                {!over && !warn && <p className="text-xs text-gray-600 mb-3">{fmt(b.limit - spent)} remaining</p>}
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => openEdit(b)}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-white/[0.07] text-gray-400 text-xs hover:bg-white/[0.04] transition-colors"
                   >
-                    {fmt(spent)}
-                  </p>
-                  <p className="text-gray-600 text-xs">of {fmt(b.limit)}</p>
+                    <Pencil size={12} />
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => setDeleteId(b._id)}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-red-400/[0.08] text-red-400 text-xs hover:bg-red-400/20 transition-colors"
+                  >
+                    <Trash2 size={12} />
+                    Delete
+                  </button>
                 </div>
               </div>
-
-              {/* Progress Bar */}
-              <div className="h-2 bg-white/[0.06] rounded-full overflow-hidden mb-3">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${pct}%`,
-                    background: `linear-gradient(90deg, ${barColor}99, ${barColor})`,
-                    boxShadow: over
-                      ? `0 0 10px ${barColor}66`
-                      : warn
-                      ? `0 0 6px ${barColor}44`
-                      : "none",
-                  }}
-                />
-              </div>
-
-              {/* Warning / Over Messages */}
-              {over && (
-                <p className="text-xs text-red-400 mb-3">
-                  Over budget by {fmt(spent - b.limit)}
-                </p>
-              )}
-              {warn && !over && (
-                <p className="text-xs text-yellow-400 mb-3">
-                  Almost at limit — {fmt(b.limit - spent)} remaining
-                </p>
-              )}
-              {!over && !warn && (
-                <p className="text-xs text-gray-600 mb-3">
-                  {fmt(b.limit - spent)} remaining
-                </p>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-2 pt-1">
-                <button
-                  onClick={() => openEdit(b)}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-white/[0.07] text-gray-400 text-xs hover:bg-white/[0.04] transition-colors"
-                >
-                  <Pencil size={12} />
-                  Edit
-                </button>
-                <button
-                  onClick={() => setDeleteId(b._id)}
-                  className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-red-400/[0.08] text-red-400 text-xs hover:bg-red-400/20 transition-colors"
-                >
-                  <Trash2 size={12} />
-                  Delete
-                </button>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Add / Edit Modal */}
       {showModal && (
@@ -219,9 +237,7 @@ export default function Budgets() {
 
             <div className="space-y-4 mb-6">
               <div>
-                <label className="block text-[11px] text-gray-500 tracking-widest uppercase mb-1.5">
-                  Category
-                </label>
+                <label className="block text-[11px] text-gray-500 tracking-widest uppercase mb-1.5">Category</label>
                 <select
                   value={form.category}
                   onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
@@ -235,9 +251,7 @@ export default function Budgets() {
               </div>
 
               <div>
-                <label className="block text-[11px] text-gray-500 tracking-widest uppercase mb-1.5">
-                  Monthly Limit ($)
-                </label>
+                <label className="block text-[11px] text-gray-500 tracking-widest uppercase mb-1.5">Monthly Limit ($)</label>
                 <input
                   type="number"
                   value={form.limit}
@@ -301,7 +315,6 @@ export default function Budgets() {
           </div>
         </div>
       )}
-
     </div>
   )
 }

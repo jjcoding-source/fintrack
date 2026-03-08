@@ -1,7 +1,7 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Plus, Pencil, Trash2, X, Check, Tag, LayoutGrid, List } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
-import { mockCategories, mockTransactions } from "../data/mockData"
+import api from "../utils/api"
 
 const fmt = (n) =>
   new Intl.NumberFormat("en-US", {
@@ -31,26 +31,47 @@ function ChartTooltip({ active, payload, label }) {
 }
 
 export default function Categories() {
-  const [categories, setCategories] = useState(mockCategories)
-  const [view, setView]             = useState("grid")
-  const [showModal, setShowModal]   = useState(false)
-  const [editingId, setEditingId]   = useState(null)
-  const [form, setForm]             = useState(EMPTY_FORM)
-  const [deleteId, setDeleteId]     = useState(null)
+  const [categories, setCategories]     = useState([])
+  const [transactions, setTransactions] = useState([])
+  const [view, setView]                 = useState("grid")
+  const [showModal, setShowModal]       = useState(false)
+  const [editingId, setEditingId]       = useState(null)
+  const [form, setForm]                 = useState(EMPTY_FORM)
+  const [deleteId, setDeleteId]         = useState(null)
+  const [loading, setLoading]           = useState(true)
+
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  async function fetchData() {
+    try {
+      const [catsRes, txRes] = await Promise.all([
+        api.get("/categories"),
+        api.get("/transactions"),
+      ])
+      setCategories(catsRes.data)
+      setTransactions(txRes.data)
+    } catch (error) {
+      console.log(error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const statsMap = categories.reduce((acc, c) => {
-    const catTxns = mockTransactions.filter(t => t.category === c.name)
+    const catTxns = transactions.filter(t => t.category === c.name)
     acc[c.name] = {
-      count:   catTxns.length,
-      total:   catTxns.reduce((s, t) => s + t.amount, 0),
+      count: catTxns.length,
+      total: catTxns.reduce((s, t) => s + t.amount, 0),
     }
     return acc
   }, {})
 
   const chartData = categories.map(c => ({
-    name:    c.name,
-    amount:  statsMap[c.name]?.total || 0,
-    color:   c.color,
+    name:   c.name,
+    amount: statsMap[c.name]?.total || 0,
+    color:  c.color,
   }))
 
   function openAdd() {
@@ -65,30 +86,40 @@ export default function Categories() {
     setShowModal(true)
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.name) return
-    if (editingId) {
-      setCategories(prev =>
-        prev.map(c =>
-          c._id === editingId ? { ...c, ...form } : c
-        )
-      )
-    } else {
-      setCategories(prev => [
-        ...prev,
-        {
-          _id:  Date.now().toString(),
-          ...form,
-        },
-      ])
+    try {
+      if (editingId) {
+        const { data } = await api.put(`/categories/${editingId}`, form)
+        setCategories(prev => prev.map(c => c._id === editingId ? data : c))
+      } else {
+        const { data } = await api.post("/categories", form)
+        setCategories(prev => [...prev, data])
+      }
+      setShowModal(false)
+      setForm(EMPTY_FORM)
+      setEditingId(null)
+    } catch (error) {
+      console.log(error)
     }
-    setShowModal(false)
-    setForm(EMPTY_FORM)
   }
 
-  function handleDelete(id) {
-    setCategories(prev => prev.filter(c => c._id !== id))
-    setDeleteId(null)
+  async function handleDelete(id) {
+    try {
+      await api.delete(`/categories/${id}`)
+      setCategories(prev => prev.filter(c => c._id !== id))
+      setDeleteId(null)
+    } catch (error) {
+      console.log(error)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-2 border-white/10 border-t-emerald-400 rounded-full animate-spin" />
+      </div>
+    )
   }
 
   return (
@@ -101,7 +132,6 @@ export default function Categories() {
           <p className="text-gray-500 text-sm mt-0.5">Organize your money by type</p>
         </div>
         <div className="flex items-center gap-3">
-          {/* View Toggle */}
           <div className="flex items-center gap-1 bg-[#13151F] border border-white/[0.07] rounded-xl p-1">
             <button
               onClick={() => setView("grid")}
@@ -116,7 +146,6 @@ export default function Categories() {
               <List size={15} />
             </button>
           </div>
-
           <button
             onClick={openAdd}
             className="flex items-center gap-2 bg-emerald-400 hover:bg-emerald-300 text-[#08090E] text-sm font-bold px-4 py-2.5 rounded-xl transition-colors"
@@ -128,35 +157,34 @@ export default function Categories() {
       </div>
 
       {/* Bar Chart */}
-      <div className="bg-[#13151F] border border-white/[0.07] rounded-2xl p-6">
-        <p className="text-white font-bold text-base mb-1">Spending by Category</p>
-        <p className="text-gray-500 text-xs mb-5">March 2025 — all transactions</p>
-        <ResponsiveContainer width="100%" height={160}>
-          <BarChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
-            <XAxis
-              dataKey="name"
-              tick={{ fill: "#6B7280", fontSize: 11 }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <YAxis
-              tick={{ fill: "#6B7280", fontSize: 10 }}
-              axisLine={false}
-              tickLine={false}
-              tickFormatter={v => `$${v}`}
-            />
-            <Tooltip content={<ChartTooltip />} />
-            <Bar dataKey="amount" name="Amount" radius={[6, 6, 0, 0]}>
-              {chartData.map((d, i) => (
-                <Cell key={i} fill={d.color} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      {chartData.length > 0 && (
+        <div className="bg-[#13151F] border border-white/[0.07] rounded-2xl p-6">
+          <p className="text-white font-bold text-base mb-1">Spending by Category</p>
+          <p className="text-gray-500 text-xs mb-5">All transactions</p>
+          <ResponsiveContainer width="100%" height={160}>
+            <BarChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
+              <XAxis dataKey="name" tick={{ fill: "#6B7280", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} />
+              <Tooltip content={<ChartTooltip />} />
+              <Bar dataKey="amount" name="Amount" radius={[6, 6, 0, 0]}>
+                {chartData.map((d, i) => (
+                  <Cell key={i} fill={d.color || "#4D9EFF"} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {categories.length === 0 && (
+        <div className="bg-[#13151F] border border-white/[0.07] rounded-2xl py-16 text-center">
+          <p className="text-gray-600 text-sm">No categories yet — create your first one!</p>
+        </div>
+      )}
 
       {/* Grid View */}
-      {view === "grid" && (
+      {view === "grid" && categories.length > 0 && (
         <div className="grid grid-cols-3 gap-4">
           {categories.map(c => {
             const stats = statsMap[c.name] || { count: 0, total: 0 }
@@ -165,7 +193,6 @@ export default function Categories() {
                 key={c._id}
                 className="bg-[#13151F] border border-white/[0.07] rounded-2xl p-5 hover:border-white/[0.13] transition-all"
               >
-                {/* Top Row */}
                 <div className="flex items-start justify-between mb-4">
                   <div
                     className="w-11 h-11 rounded-xl flex items-center justify-center"
@@ -176,9 +203,9 @@ export default function Categories() {
                   <span
                     className="text-[10px] px-2.5 py-1 rounded-full border"
                     style={{
-                      color:            c.type === "income" ? "#00E5A0" : "#FF5F7E",
-                      background:       c.type === "income" ? "#00E5A010" : "#FF5F7E10",
-                      borderColor:      c.type === "income" ? "#00E5A033" : "#FF5F7E33",
+                      color:       c.type === "income" ? "#00E5A0" : "#FF5F7E",
+                      background:  c.type === "income" ? "#00E5A010" : "#FF5F7E10",
+                      borderColor: c.type === "income" ? "#00E5A033" : "#FF5F7E33",
                     }}
                   >
                     {c.type.toUpperCase()}
@@ -187,7 +214,7 @@ export default function Categories() {
 
                 <p className="text-white font-bold text-base mb-1">{c.name}</p>
                 <p className="text-gray-500 text-xs mb-4">
-                  {stats.count} transaction{stats.count !== 1 ? "s" : ""} this month
+                  {stats.count} transaction{stats.count !== 1 ? "s" : ""}
                 </p>
 
                 <div className="flex items-center justify-between">
@@ -219,7 +246,7 @@ export default function Categories() {
       )}
 
       {/* List View */}
-      {view === "list" && (
+      {view === "list" && categories.length > 0 && (
         <div className="bg-[#13151F] border border-white/[0.07] rounded-2xl overflow-hidden">
           <div className="grid grid-cols-[2fr_1fr_1fr_1fr_80px] px-5 py-3 border-b border-white/[0.07]">
             {["Category", "Type", "Transactions", "Total", ""].map((h, i) => (
@@ -307,11 +334,8 @@ export default function Categories() {
             </div>
 
             <div className="space-y-4 mb-6">
-
               <div>
-                <label className="block text-[11px] text-gray-500 tracking-widest uppercase mb-1.5">
-                  Name
-                </label>
+                <label className="block text-[11px] text-gray-500 tracking-widest uppercase mb-1.5">Name</label>
                 <input
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
@@ -321,9 +345,7 @@ export default function Categories() {
               </div>
 
               <div>
-                <label className="block text-[11px] text-gray-500 tracking-widest uppercase mb-1.5">
-                  Type
-                </label>
+                <label className="block text-[11px] text-gray-500 tracking-widest uppercase mb-1.5">Type</label>
                 <div className="grid grid-cols-2 gap-2 p-1 bg-white/[0.03] rounded-xl">
                   {["expense", "income"].map(type => (
                     <button
@@ -344,9 +366,7 @@ export default function Categories() {
               </div>
 
               <div>
-                <label className="block text-[11px] text-gray-500 tracking-widest uppercase mb-2">
-                  Color
-                </label>
+                <label className="block text-[11px] text-gray-500 tracking-widest uppercase mb-2">Color</label>
                 <div className="flex gap-2 flex-wrap">
                   {COLOR_OPTIONS.map(color => (
                     <button
@@ -354,15 +374,14 @@ export default function Categories() {
                       onClick={() => setForm(f => ({ ...f, color }))}
                       className="w-8 h-8 rounded-lg transition-transform hover:scale-110"
                       style={{
-                        background: color,
-                        outline: form.color === color ? `2px solid ${color}` : "none",
+                        background:    color,
+                        outline:       form.color === color ? `2px solid ${color}` : "none",
                         outlineOffset: "2px",
                       }}
                     />
                   ))}
                 </div>
               </div>
-
             </div>
 
             <div className="flex gap-3">
@@ -418,7 +437,6 @@ export default function Categories() {
           </div>
         </div>
       )}
-
     </div>
   )
 }
