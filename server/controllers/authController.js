@@ -5,7 +5,6 @@ const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" })
 }
 
-
 export const register = async (req, res) => {
   try {
     const { name, email, password } = req.body
@@ -32,10 +31,10 @@ export const register = async (req, res) => {
       token: generateToken(user._id),
     })
   } catch (error) {
+    console.log("Register error:", error.message)
     res.status(500).json({ message: error.message })
   }
 }
-
 
 export const login = async (req, res) => {
   try {
@@ -62,6 +61,7 @@ export const login = async (req, res) => {
       token: generateToken(user._id),
     })
   } catch (error) {
+    console.log("Login error:", error.message)
     res.status(500).json({ message: error.message })
   }
 }
@@ -71,6 +71,7 @@ export const getMe = async (req, res) => {
     const user = await User.findById(req.user._id).select("-password")
     res.json(user)
   } catch (error) {
+    console.log("GetMe error:", error.message)
     res.status(500).json({ message: error.message })
   }
 }

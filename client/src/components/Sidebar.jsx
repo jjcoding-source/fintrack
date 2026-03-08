@@ -1,4 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom"
+import { useAuth } from "../context/AuthContext"
 import {
   LayoutDashboard,
   ArrowLeftRight,
@@ -16,7 +17,8 @@ const navItems = [
 ]
 
 export default function Sidebar() {
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
+  const { user, logout } = useAuth()
 
   return (
     <aside className="w-56 shrink-0 flex flex-col bg-[#0F1117] border-r border-white/[0.07] px-3 py-6">
@@ -84,14 +86,14 @@ export default function Sidebar() {
         {/* User */}
         <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-white/[0.04] transition-colors cursor-pointer group">
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-blue-400 flex items-center justify-center text-sm font-bold text-[#08090E] shrink-0">
-            A
+            {user?.name?.charAt(0).toUpperCase() || "U"}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm text-white truncate">Alex Morgan</p>
+            <p className="text-sm text-white truncate">{user?.name || "User"}</p>
             <p className="text-[11px] text-gray-600">Free plan</p>
           </div>
           <button
-            onClick={() => navigate("/login")}
+            onClick={() => { logout(); navigate("/login") }}
             className="opacity-0 group-hover:opacity-100 transition-opacity"
           >
             <LogOut size={14} className="text-gray-500 hover:text-red-400 transition-colors" />
