@@ -3,12 +3,10 @@ import { TrendingUp, TrendingDown, Wallet, PiggyBank, ArrowUpRight, ArrowDownRig
 import { AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
 import api from "../utils/api"
 
-const fmt = (n) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency", currency: "USD", maximumFractionDigits: 0,
-  }).format(n)
+import { useCurrency } from "../context/CurrencyContext"
 
 const PIE_COLORS = ["#4D9EFF", "#FFD166", "#4ADE80", "#FF8FAB", "#B57BFF", "#FF5F7E"]
+
 
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
@@ -49,6 +47,7 @@ export default function Dashboard() {
   const [loading, setLoading]           = useState(true)
   const [showModal, setShowModal]       = useState(false)
   const [form, setForm]                 = useState({ title: "", amount: "", type: "expense", category: "", date: "", note: "" })
+  const { fmt } = useCurrency()
 
   useEffect(() => {
     fetchTransactions()

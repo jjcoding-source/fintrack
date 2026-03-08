@@ -2,11 +2,7 @@ import { useState, useMemo, useEffect } from "react"
 import { Plus, Pencil, Trash2, X, Check, Target } from "lucide-react"
 import api from "../utils/api"
 
-const fmt = (n) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency", currency: "USD", maximumFractionDigits: 0,
-  }).format(n)
-
+import { useCurrency } from "../context/CurrencyContext"
 const EMPTY_FORM = { category: "", limit: "" }
 
 const CATEGORY_OPTIONS = [
@@ -21,6 +17,7 @@ export default function Budgets() {
   const [form, setForm]                 = useState(EMPTY_FORM)
   const [deleteId, setDeleteId]         = useState(null)
   const [loading, setLoading]           = useState(true)
+  const { fmt } = useCurrency()
 
   useEffect(() => {
     fetchData()

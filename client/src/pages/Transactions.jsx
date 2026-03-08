@@ -2,10 +2,7 @@ import { useState, useMemo, useEffect } from "react"
 import { Filter, Search, Plus, Pencil, Trash2, X, Check } from "lucide-react"
 import api from "../utils/api"
 
-const fmt = (n) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency", currency: "USD", maximumFractionDigits: 0,
-  }).format(n)
+import { useCurrency } from "../context/CurrencyContext"
 
 const EMPTY_FORM = {
   title: "", amount: "", type: "expense", category: "", date: "", note: "",
@@ -21,6 +18,7 @@ export default function Transactions() {
   const [form, setForm]                 = useState(EMPTY_FORM)
   const [deleteId, setDeleteId]         = useState(null)
   const [loading, setLoading]           = useState(true)
+  const { fmt } = useCurrency()
 
   useEffect(() => {
     fetchData()

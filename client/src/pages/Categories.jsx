@@ -3,10 +3,7 @@ import { Plus, Pencil, Trash2, X, Check, Tag, LayoutGrid, List } from "lucide-re
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import api from "../utils/api"
 
-const fmt = (n) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency", currency: "USD", maximumFractionDigits: 0,
-  }).format(n)
+import { useCurrency } from "../context/CurrencyContext"
 
 const EMPTY_FORM = { name: "", type: "expense", color: "#4D9EFF" }
 
@@ -14,6 +11,7 @@ const COLOR_OPTIONS = [
   "#4D9EFF", "#FFD166", "#4ADE80", "#FF8FAB",
   "#B57BFF", "#FF5F7E", "#00E5A0", "#FB923C",
 ]
+
 
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
@@ -39,6 +37,7 @@ export default function Categories() {
   const [form, setForm]                 = useState(EMPTY_FORM)
   const [deleteId, setDeleteId]         = useState(null)
   const [loading, setLoading]           = useState(true)
+  const { fmt } = useCurrency()
 
   useEffect(() => {
     fetchData()

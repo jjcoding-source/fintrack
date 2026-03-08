@@ -15,10 +15,12 @@ const navItems = [
   { label: "Budgets",      path: "/budgets",      icon: Target },
   { label: "Categories",   path: "/categories",   icon: Tag },
 ]
+import { useCurrency, CURRENCIES } from "../context/CurrencyContext"
 
 export default function Sidebar() {
   const navigate  = useNavigate()
   const { user, logout } = useAuth()
+  const { currency, changeCurrency } = useCurrency()
 
   return (
     <aside className="w-56 shrink-0 flex flex-col bg-[#0F1117] border-r border-white/[0.07] px-3 py-6">
@@ -73,6 +75,23 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      {/* Currency Selector */}
+      <div className="mx-1 mb-2">
+        <p className="text-[10px] text-gray-700 tracking-widest uppercase mb-1.5 px-1">Currency</p>
+        <select
+          value={currency.code}
+          onChange={e => changeCurrency(e.target.value)}
+          className="w-full bg-white/[0.04] border border-white/[0.07] rounded-xl px-3 py-2 text-xs text-gray-300 outline-none focus:border-emerald-400/40 transition-colors"
+        >
+         {CURRENCIES.map(c => (
+           <option key={c.code} value={c.code} className="bg-[#0F1117]">
+             {c.symbol} {c.name}
+           </option>
+         ))}
+       </select>
+     </div>
+
 
       {/* Bottom */}
       <div className="mt-auto flex flex-col gap-3">
